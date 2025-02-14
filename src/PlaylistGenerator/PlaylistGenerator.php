@@ -17,7 +17,7 @@ class PlaylistGenerator
         string $path,
     ) {
         if (!file_exists($path)) {
-            mkdir($path, recursive: true);
+            throw new InvalidArgumentException('Given download path does not exist');
         }
 
         if (!is_dir($path)) {

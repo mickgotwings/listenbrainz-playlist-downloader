@@ -4,11 +4,13 @@ namespace App\MusicSources\YoutubeMusic;
 
 use App\Model\Download;
 use App\Model\Track;
+use App\MusicSources\Exception\DownloadException;
+use App\MusicSources\Exception\TrackMismatchException;
 use App\MusicSources\Exception\TrackNotFoundException;
 use App\MusicSources\MusicSourceInterface;
-use stdClass;
 use Ytmusicapi\SearchResult;
 use Ytmusicapi\YTMusic;
+use Ytmusicapi\YTMusicUserError;
 
 class YoutubeMusicSource implements MusicSourceInterface
 {
@@ -17,12 +19,18 @@ class YoutubeMusicSource implements MusicSourceInterface
         private readonly YtDlpDownloader $ytDlpDownloader,
     ) {}
 
+    /**
+     * @throws YTMusicUserError
+     * @throws TrackMismatchException
+     * @throws DownloadException
+     * @throws TrackNotFoundException
+     */
     public function grab(Track $track): Download
     {
         $results = $this->ytmusicClient->search(
             query: (string) $track,
             filter: 'songs',
-            limit: 5,
+            limit: $_ENV['TRY_SONGS'] ?? 5,
         );
 
         if (empty($results)) {
@@ -37,7 +45,7 @@ class YoutubeMusicSource implements MusicSourceInterface
         }
 
         if (!isset($match)) {
-            throw new TrackNotFoundException();
+            throw new TrackMismatchException();
         }
 
         return $this->ytDlpDownloader->download($match);

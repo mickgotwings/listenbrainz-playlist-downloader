@@ -2,7 +2,7 @@
 
 require_once __DIR__ . '/vendor/autoload.php';
 
-$env = parse_ini_file('.env');
+$env = Dotenv\Dotenv::createImmutable(__DIR__);
+$env->load();
 
-//$loader = require __DIR__ . '/vendor/autoload.php';
-//$loader->add('App', __DIR__ . '/src');
+return new App\Application($env);

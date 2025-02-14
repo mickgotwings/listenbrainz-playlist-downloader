@@ -5,6 +5,7 @@ namespace App\MusicSources\YoutubeMusic;
 use App\Model\Download;
 use App\MusicSources\Exception\DownloadException;
 use InvalidArgumentException;
+use Psr\Log\LoggerInterface;
 use Ramsey\Uuid\Uuid;
 use YoutubeDl\Options;
 use YoutubeDl\YoutubeDl;
@@ -17,9 +18,10 @@ class YtDlpDownloader
     public function __construct(
         string $downloadPath,
         private readonly YoutubeDl $youtubeDl,
+        private readonly LoggerInterface $logger,
     ) {
         if (!file_exists($downloadPath)) {
-            mkdir($downloadPath, recursive: true);
+            throw new InvalidArgumentException('Given download path does not exist');
         }
 
         if (!is_dir($downloadPath)) {
@@ -35,11 +37,17 @@ class YtDlpDownloader
      */
     public function download(object $searchResult): Download
     {
-        // mimicking human behavior
-        //$microseconds = rand(0, 1_000_000);
-        $microseconds = 0;
-        echo "Sleeping for $microseconds microseconds...\n";
-        usleep($microseconds);
+        $maxSleepSeconds = $_ENV['YTDLP_MAX_SLEEP_SECONDS'] ?? 5;
+        if ($maxSleepSeconds > 0) {
+            $microseconds = rand(0, $maxSleepSeconds * 1_000_000);
+            $this->logger->info(
+                sprintf(
+                    'Sleeping for %d seconds to mimic human behavior',
+                    round($microseconds / 1_000_000, 3)
+                )
+            );
+            usleep($microseconds);
+        }
 
         $collection = $this->youtubeDl->download(
             Options::create()
@@ -48,7 +56,6 @@ class YtDlpDownloader
                 ->audioFormat('mp3')
                 ->audioQuality('0') // best
                 ->output('%(artist)s - %(track)s.%(ext)s')
-                //->output('%(title)s.%(ext)s')
                 ->url(YoutubeUrlBuilder::fromSearchResult($searchResult))
         );
 
