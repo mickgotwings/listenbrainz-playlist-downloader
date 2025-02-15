@@ -4,7 +4,7 @@ namespace App\ApiWrapper\Model;
 
 use Ramsey\Uuid\UuidInterface;
 
-readonly class TrackModel
+readonly class ApiTrack
 {
     public function __construct(
         public UuidInterface $uuid,

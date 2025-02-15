@@ -27,6 +27,9 @@ class PlaylistGenerator
         $this->path = rtrim(realpath($path), '/');
     }
 
+    /**
+     * @throws GenerationException
+     */
     public function generate(Playlist $playlist): void
     {
         $m3u = new M3uData();

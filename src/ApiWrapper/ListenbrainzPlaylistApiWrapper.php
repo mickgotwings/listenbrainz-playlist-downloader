@@ -2,8 +2,8 @@
 
 namespace App\ApiWrapper;
 
-use App\ApiWrapper\Model\PlaylistModel;
-use App\ApiWrapper\Model\TrackModel;
+use App\ApiWrapper\Model\ApiPlaylist;
+use App\ApiWrapper\Model\ApiTrack;
 use App\UrlParser;
 use DateTimeImmutable;
 use Listenbrainz\Api\LbPlaylistsApi;
@@ -19,7 +19,7 @@ class ListenbrainzPlaylistApiWrapper
 
     /**
      * @param string $userName
-     * @return iterable<PlaylistModel>
+     * @return iterable<ApiPlaylist>
      * @throws ApiException
      */
     public function getCreatedFor(string $userName): iterable {
@@ -27,7 +27,7 @@ class ListenbrainzPlaylistApiWrapper
 
         foreach ($apiPlaylists->getPlaylists() as $apiPlaylist) {
             $apiPlaylist = $apiPlaylist->getPlaylist();
-            yield new PlaylistModel(
+            yield new ApiPlaylist(
                 $this->urlParser->parseTrailingUuid($apiPlaylist->getIdentifier()),
                 $apiPlaylist->getTitle(),
                 $apiPlaylist->getAnnotation(),
@@ -47,7 +47,7 @@ class ListenbrainzPlaylistApiWrapper
         $apiPlaylist = $this->playlistsApi->fetchPlaylist($playlistUuid);
 
         foreach ($apiPlaylist->getPlaylist()->getTrack() as $apiPlaylistTrack) {
-            yield new TrackModel(
+            yield new ApiTrack(
                 $this->urlParser->parseTrailingUuid($apiPlaylistTrack->getIdentifier()[0]),
                 $apiPlaylistTrack->getCreator(),
                 $apiPlaylistTrack->getAlbum(),

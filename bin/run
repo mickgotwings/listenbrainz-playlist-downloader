@@ -1,6 +1,7 @@
 #!/usr/bin/env php
 <?php declare(strict_types=1);
 
+/** @var App\Application $app */
 $app = require_once __DIR__ . '/../bootstrap.php';
 
 $app->run();

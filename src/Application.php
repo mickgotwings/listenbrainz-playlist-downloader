@@ -3,28 +3,34 @@
 namespace App;
 
 use App\ApiWrapper\ListenbrainzPlaylistApiWrapper;
+use App\ApiWrapper\Model\ApiPlaylist;
 use App\Model\Playlist;
 use App\Model\PlaylistItem;
 use App\Model\Track;
 use App\MusicSources\Exception\DownloadException;
 use App\MusicSources\Exception\TrackMismatchException;
 use App\MusicSources\Exception\TrackNotFoundException;
+use App\MusicSources\MusicSourceInterface;
 use App\MusicSources\YoutubeMusic\YoutubeMusicSource;
 use App\MusicSources\YoutubeMusic\YtDlpDownloader;
 use App\PlaylistGenerator\PlaylistGenerator;
 use App\Processor\ID3Processor;
 use Dotenv\Dotenv;
+use Exception;
 use Listenbrainz\Api\LbPlaylistsApi;
 use Monolog\Handler\StreamHandler;
 use Monolog\Level;
 use Monolog\Logger;
 use Psr\Log\LoggerInterface;
+use Ramsey\Uuid\UuidInterface;
 use YoutubeDl\YoutubeDl;
 use Ytmusicapi\YTMusic;
 
 class Application
 {
     private readonly LoggerInterface $logger;
+    private readonly ListenbrainzPlaylistApiWrapper $lbApi;
+    private readonly ID3Processor $id3Processor;
 
     public function __construct(Dotenv $env)
     {
@@ -43,6 +49,13 @@ class Application
                 ($_ENV['DEBUG'] ?? false) === true ? Level::Debug : Level::Info
             )
         );
+
+        $this->lbApi = new ListenbrainzPlaylistApiWrapper(
+            new LbPlaylistsApi(),
+            new UrlParser(),
+        );
+
+        $this->id3Processor = new ID3Processor();
     }
 
     private function ensureValidEnv(Dotenv $env): void
@@ -62,92 +75,126 @@ class Application
 
     public function run(): void
     {
-        $lbApi = new ListenbrainzPlaylistApiWrapper(
-            new LbPlaylistsApi(),
-            new UrlParser(),
+        foreach ($this->fetchPlaylists() as $apiPlaylist) {
+            $this->processPlaylist($apiPlaylist);
+        }
+
+        $this->logger->info('Done');
+    }
+
+    private function fetchPlaylists(): iterable
+    {
+        return $this->lbApi->getCreatedFor($_ENV['LISTENBRAINZ_USERNAME']);
+    }
+
+    private function fetchPlaylistTracks(UuidInterface $playlistUuid): iterable
+    {
+        $apiTracks = $this->lbApi->getTracks($playlistUuid);
+        foreach ($apiTracks as $apiTrack) {
+            yield new Track(
+                $apiTrack->artist,
+                $apiTrack->album,
+                $apiTrack->title,
+            );
+        }
+    }
+
+    /**
+     * @param string $downloadPath
+     * @return iterable<MusicSourceInterface>
+     */
+    private function buildSources(string $downloadPath): iterable
+    {
+        yield new YoutubeMusicSource(
+            new YTMusic(),
+            new YtDlpDownloader(
+                $downloadPath,
+                new YoutubeDl(),
+                $this->logger
+            )
+        );
+    }
+
+    private function processPlaylist(ApiPlaylist $playlist): void
+    {
+        $this->logger->info("Processing playlist $playlist->name");
+
+        $playlistPath = realpath(
+            sprintf(
+                '%s/%s',
+                $_ENV['DOWNLOAD_PATH'] ?? '/tmp/music',
+                FilenameSanitizer::sanitize($playlist->name)
+            )
         );
 
-        $id3Processor = new ID3Processor();
+        if (file_exists($playlistPath)) {
+            $this->logger->info("Skipping, since this playlist already exists in the download directory");
+            return;
+        }
 
-        $result = $lbApi->getCreatedFor($_ENV['LISTENBRAINZ_USERNAME']);
+        mkdir($playlistPath);
 
-        foreach ($result as $apiPlaylist) {
-            $this->logger->info("Processing playlist $apiPlaylist->name");
+        $sources = $this->buildSources($playlistPath);
 
-            $apiTracks = $lbApi->getTracks($apiPlaylist->uuid);
+        $playlistItems = [];
 
-            $playlistPath = realpath($_ENV['DOWNLOAD_PATH'] ?? '/tmp/music') . DIRECTORY_SEPARATOR . FilenameSanitizer::sanitize($apiPlaylist->name);
-
-            if (file_exists($playlistPath)) {
-                $this->logger->info("Skipping, since this playlist already exists in the download directory");
-                continue;
-            }
-
-            mkdir($playlistPath);
-
-            $source = new YoutubeMusicSource(
-                new YTMusic(),
-                new YtDlpDownloader(
-                    $playlistPath,
-                    new YoutubeDl(),
-                    $this->logger
-                )
-            );
-
-            $playlistItems = [];
-
-            foreach ($apiTracks as $apiTrack) {
-                $track = new Track(
-                    $apiTrack->artist,
-                    $apiTrack->album,
-                    $apiTrack->title,
-                );
-
+        foreach ($this->fetchPlaylistTracks($playlist->uuid) as $track) {
+            foreach ($sources as $source) {
                 try {
                     $this->logger->info("Downloading $track->artist - $track->title ($track->album)");
 
                     $download = $source->grab($track);
 
-                    $id3Processor->fillTags($download, $track);
+                    $this->id3Processor->fillTags($download, $track);
 
                     $playlistItems[] = new PlaylistItem(
                         $track,
                         $download,
                     );
-                } catch (TrackNotFoundException $e) {
-                    $this->logger->error(
-                        "Track $track->artist - $track->title ($track->album) not found",
-                        ['exception' => $e]
-                    );
-                } catch (TrackMismatchException $e) {
-                    $this->logger->error(
-                        "Requested $track->artist - $track->title ($track->album), got a different track",
-                        ['exception' => $e]
-                    );
-                } catch (DownloadException $e) {
-                    $this->logger->error(
-                        "Could not download $track->artist - $track->title ($track->album)",
-                        ['exception' => $e]
-                    );
+                } catch (TrackNotFoundException|TrackMismatchException|DownloadException $e) {
+                    $this->logDownloadException($e);
                 }
-
-                break; // debug
             }
-
-            $this->logger->info("Generating playlist file for $apiPlaylist->name");
-
-            $playlistGenerator = new PlaylistGenerator($playlistPath);
-
-            $playlistGenerator->generate(
-                new Playlist(
-                    $apiPlaylist->name,
-                    $playlistItems,
-                )
-            );
-
-            break; // debug
         }
 
-        $this->logger->info('Done');
+        $this->logger->info("Generating playlist file for $playlist->name");
+
+        $playlistGenerator = new PlaylistGenerator($playlistPath);
+
+        $playlistGenerator->generate(
+            new Playlist(
+                $playlist->name,
+                $playlistItems,
+            )
+        );
+    }
+
+    private function logDownloadException(Exception $exception): void
+    {
+        switch (get_class($exception)) {
+            case TrackNotFoundException::class:
+                $this->logger->error(
+                    'Track not found',
+                    ['exception' => $exception]
+                );
+                break;
+            case TrackMismatchException::class:
+                $this->logger->error(
+                    'Got a mismatched track',
+                    ['exception' => $exception]
+                );
+                break;
+            case DownloadException::class:
+                $this->logger->error(
+                    'Could not download track',
+                    ['exception' => $exception]
+                );
+                break;
+            default:
+                $this->logger->critical(
+                    'Unknown error',
+                    ['exception' => $exception]
+                );
+        }
     }
 }

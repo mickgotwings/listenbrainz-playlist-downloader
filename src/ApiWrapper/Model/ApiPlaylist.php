@@ -5,7 +5,7 @@ namespace App\ApiWrapper\Model;
 use DateTimeInterface;
 use Ramsey\Uuid\UuidInterface;
 
-readonly class PlaylistModel
+readonly class ApiPlaylist
 {
     public function __construct(
         public UuidInterface $uuid,
@@ -13,7 +13,5 @@ readonly class PlaylistModel
         public string $description,
         public DateTimeInterface $createdAt,
         public ?string $type,
-    )
-    {
-    }
+    ) {}
 }
