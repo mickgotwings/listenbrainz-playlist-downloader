@@ -1,10 +1,10 @@
 {
     "require": {
         "php": "^8.4",
+        "ext-mbstring": "*",
         "micks/listenbrainz-api": "*@dev",
         "ramsey/uuid": "^4.7",
         "kiwilan/php-audio": "^4.0",
-        "ext-mbstring": "*",
         "gemorroj/m3u-parser": "^5.5",
         "ytmusicapi/ytmusicapi": "^1.8",
         "norkunas/youtube-dl-php": "dev-master",

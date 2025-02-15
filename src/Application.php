@@ -101,30 +101,30 @@ class Application
 
     /**
      * @param string $downloadPath
-     * @return iterable<MusicSourceInterface>
+     * @return MusicSourceInterface[]
      */
-    private function buildSources(string $downloadPath): iterable
+    private function buildSources(string $downloadPath): array
     {
-        yield new YoutubeMusicSource(
-            new YTMusic(),
-            new YtDlpDownloader(
-                $downloadPath,
-                new YoutubeDl(),
-                $this->logger
+        return [
+            new YoutubeMusicSource(
+                new YTMusic(),
+                new YtDlpDownloader(
+                    $downloadPath,
+                    new YoutubeDl(),
+                    $this->logger
+                )
             )
-        );
+        ];
     }
 
     private function processPlaylist(ApiPlaylist $playlist): void
     {
         $this->logger->info("Processing playlist $playlist->name");
 
-        $playlistPath = realpath(
-            sprintf(
-                '%s/%s',
-                $_ENV['DOWNLOAD_PATH'] ?? '/tmp/music',
-                FilenameSanitizer::sanitize($playlist->name)
-            )
+        $playlistPath = sprintf(
+            '%s/%s',
+            realpath($_ENV['DOWNLOAD_PATH'] ?? '/tmp/music'),
+            FilenameSanitizer::sanitize($playlist->name)
         );
 
         if (file_exists($playlistPath)) {
