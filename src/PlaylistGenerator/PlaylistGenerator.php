@@ -42,7 +42,7 @@ class PlaylistGenerator
         foreach ($playlist->items as $item) {
             $filePath = realpath($item->download->audioPath);
             if (str_starts_with($filePath, $this->path)) {
-                $filePath = substr($filePath, strlen($this->path));
+                $filePath = substr($filePath, strlen($this->path) + 1);
             }
 
             $m3u->append(

@@ -1,8 +1,9 @@
 FROM php:8.4-cli-alpine
-COPY . /opt/lbdl
 WORKDIR /opt/lbdl
-RUN apk add yt-dlp-core
-RUN apk add ffmpeg
+COPY composer.json composer.lock ./
 COPY --from=composer/composer:latest-bin /composer /usr/bin/composer
+RUN apk add -U tzdata yt-dlp-core ffmpeg
 RUN composer install --no-dev
-CMD ["./bin/run"]
+RUN echo "30 0 * * * /opt/lbdl/bin/run" > /etc/crontabs/root
+COPY . ./
+CMD ["crond", "-f"]
