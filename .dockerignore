@@ -1,3 +1,7 @@
+.git
+.idea
+.gitignore
 vendor
 .env
+composer.phar
 Dockerfile
