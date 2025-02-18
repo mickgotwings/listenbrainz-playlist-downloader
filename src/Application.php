@@ -28,9 +28,14 @@ use Ytmusicapi\YTMusic;
 
 class Application
 {
+    private const TMP_PATH = '/tmp/music';
+    private const DESTINATION_PATH = '/music';
+
     private readonly LoggerInterface $logger;
     private readonly ListenbrainzPlaylistApiWrapper $lbApi;
     private readonly ID3Processor $id3Processor;
+    private readonly PlaylistGenerator $playlistGenerator;
+    private readonly iterable $sources;
 
     public function __construct(Dotenv $env)
     {
@@ -39,14 +44,8 @@ class Application
         $this->logger = new Logger('lbdl');
         $this->logger->pushHandler(
             new StreamHandler(
-                'php://stderr',
-                ($_ENV['DEBUG'] ?? false) === true ? Level::Debug : Level::Warning
-            )
-        );
-        $this->logger->pushHandler(
-            new StreamHandler(
                 'php://stdout',
-                ($_ENV['DEBUG'] ?? false) === true ? Level::Debug : Level::Info
+                ($_ENV['DEBUG'] ?? 'false') === 'true' ? Level::Debug : Level::Info
             )
         );
 
@@ -56,6 +55,10 @@ class Application
         );
 
         $this->id3Processor = new ID3Processor();
+
+        $this->playlistGenerator = new PlaylistGenerator(self::TMP_PATH);
+
+        $this->sources = $this->buildSources();
     }
 
     private function ensureValidEnv(Dotenv $env): void
@@ -64,17 +67,31 @@ class Application
 
         $env->ifPresent('YTDLP_MAX_SLEEP_SECONDS')->isInteger();
 
-        $env->ifPresent('DOWNLOAD_PATH')
-            ->assertNullable(
-                fn ($path) => file_exists($path) && is_dir($path),
-                'Download path does not exist or you do not have access to it'
-            );
-
         $env->ifPresent('TRY_SONGS')->isInteger();
+
+        $env->ifPresent('DEBUG')->isBoolean();
+    }
+
+    /**
+     * @return MusicSourceInterface[]
+     */
+    private function buildSources(): array
+    {
+        return [
+            new YoutubeMusicSource(
+                new YTMusic(),
+                new YtDlpDownloader(
+                    self::TMP_PATH,
+                    new YoutubeDl(),
+                    $this->logger
+                )
+            )
+        ];
     }
 
     public function run(): void
     {
+        var_dump($_ENV);
         foreach ($this->fetchPlaylists() as $apiPlaylist) {
             $this->processPlaylist($apiPlaylist);
         }
@@ -99,47 +116,19 @@ class Application
         }
     }
 
-    /**
-     * @param string $downloadPath
-     * @return MusicSourceInterface[]
-     */
-    private function buildSources(string $downloadPath): array
+    private function processPlaylist(ApiPlaylist $apiPlaylist): void
     {
-        return [
-            new YoutubeMusicSource(
-                new YTMusic(),
-                new YtDlpDownloader(
-                    $downloadPath,
-                    new YoutubeDl(),
-                    $this->logger
-                )
-            )
-        ];
-    }
+        $this->logger->info("Processing playlist $apiPlaylist->name");
 
-    private function processPlaylist(ApiPlaylist $playlist): void
-    {
-        $this->logger->info("Processing playlist $playlist->name");
-
-        $playlistPath = sprintf(
-            '%s/%s',
-            realpath($_ENV['DOWNLOAD_PATH'] ?? '/tmp/music'),
-            FilenameSanitizer::sanitize($playlist->name)
-        );
-
-        if (file_exists($playlistPath)) {
+        if ($this->checkIfPlaylistExists($apiPlaylist->name)) {
             $this->logger->info("Skipping, since this playlist already exists in the download directory");
             return;
         }
 
-        mkdir($playlistPath);
-
-        $sources = $this->buildSources($playlistPath);
-
         $playlistItems = [];
 
-        foreach ($this->fetchPlaylistTracks($playlist->uuid) as $track) {
-            foreach ($sources as $source) {
+        foreach ($this->fetchPlaylistTracks($apiPlaylist->uuid) as $track) {
+            foreach ($this->sources as $source) {
                 try {
                     $this->logger->info("Downloading $track->artist - $track->title ($track->album)");
 
@@ -157,15 +146,57 @@ class Application
             }
         }
 
-        $this->logger->info("Generating playlist file for $playlist->name");
+        $this->logger->info("Generating playlist file for $apiPlaylist->name");
 
-        $playlistGenerator = new PlaylistGenerator($playlistPath);
+        $playlist = new Playlist(
+            $apiPlaylist->name,
+            $playlistItems,
+        );
 
-        $playlistGenerator->generate(
-            new Playlist(
-                $playlist->name,
-                $playlistItems,
-            )
+        $this->playlistGenerator->generate($playlist);
+
+        $this->movePlaylist($playlist);
+    }
+
+    private function checkIfPlaylistExists(string $playlistTitle): bool
+    {
+        $path = sprintf(
+            '%s/%s',
+            self::DESTINATION_PATH,
+            FilenameSanitizer::sanitize($playlistTitle)
+        );
+
+        $this->logger->debug("Checking if playlist exists at $path");
+
+        return file_exists($path);
+    }
+
+    private function movePlaylist(Playlist $playlist): void
+    {
+        $destinationDir = sprintf(
+            '%s/%s',
+            self::DESTINATION_PATH,
+            FilenameSanitizer::sanitize($playlist->title),
+        );
+
+        $this->logger->debug("moving playlist to $destinationDir");
+
+        foreach ($playlist->items as $item) {
+            rename(
+                $item->download->audioPath,
+                sprintf('%s/%s',
+                    $destinationDir,
+                    basename($item->download->audioPath)
+                ),
+            );
+        }
+
+        rename(
+            $playlist->getPath(),
+            sprintf('%s/%s',
+                $destinationDir,
+                basename($playlist->getPath())
+            ),
         );
     }
 

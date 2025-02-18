@@ -18,7 +18,7 @@ services:
       - TZ=Etc/UTC # Put your time zone here, so that lbdl can download your new playlists shortly as they are available
     volumes:
       - /path/to/your/.env:/opt/lbdl/.env
-      - /path/to/your/music/dir:/tmp/music # Container path can be configured in .env, though it is not required
+      - /path/to/your/music/dir:/music
     restart: unless-stopped
     image: ghcr.io/mickgotwings/listenbrainz-playlist-downloader:latest
 ```
@@ -26,7 +26,7 @@ services:
 ## Manual
 You can also run it manually (e.g. for debug purposes)
 ```shell
-docker run -v /path/to/your/.env:/opt/lbdl/.env -v /path/to/your/music/dir:/tmp/music -it ghcr.io/mickgotwings/listenbrainz-playlist-downloader:master ./bin/run 
+docker run -v /path/to/your/.env:/opt/lbdl/.env -v /path/to/your/music/dir:/music -it --rm ghcr.io/mickgotwings/listenbrainz-playlist-downloader:latest ./bin/run 
 ```
 
 # Configuration (.env)

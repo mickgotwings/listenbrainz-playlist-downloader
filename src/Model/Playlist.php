@@ -2,13 +2,25 @@
 
 namespace App\Model;
 
-readonly class Playlist
+class Playlist
 {
+    private string $path;
+
     /**
      * @param PlaylistItem[] $items
      */
     public function __construct(
-        public string $title,
-        public array $items,
+        public readonly string $title,
+        public readonly array $items,
     ) {}
+
+    public function getPath(): string
+    {
+        return $this->path;
+    }
+
+    public function setPath(string $path): void
+    {
+        $this->path = $path;
+    }
 }

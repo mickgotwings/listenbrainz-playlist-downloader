@@ -55,9 +55,13 @@ class PlaylistGenerator
             throw new GenerationException('Playlist is invalid');
         }
 
+        $playlistPath = sprintf('%s/%s.m3u', $this->path, $playlist->title);
+
         file_put_contents(
-            sprintf('%s/%s.m3u', $this->path, $playlist->title),
+            $playlistPath,
             (string) $m3u
         );
+
+        $playlist->setPath($playlistPath);
     }
 }

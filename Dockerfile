@@ -1,5 +1,6 @@
 FROM php:8.4-cli-alpine
 WORKDIR /opt/lbdl
+RUN mkdir -p /tmp/music
 COPY composer.json composer.lock ./
 COPY --from=composer/composer:latest-bin /composer /usr/bin/composer
 RUN apk add --no-cache tzdata yt-dlp-core ffmpeg
