@@ -91,7 +91,6 @@ class Application
 
     public function run(): void
     {
-        var_dump($_ENV);
         foreach ($this->fetchPlaylists() as $apiPlaylist) {
             $this->processPlaylist($apiPlaylist);
         }
