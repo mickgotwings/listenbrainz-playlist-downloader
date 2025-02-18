@@ -20,7 +20,7 @@ services:
       - /path/to/your/.env:/opt/lbdl/.env
       - /path/to/your/music/dir:/tmp/music # Container path can be configured in .env, though it is not required
     restart: unless-stopped
-    image: ghcr.io/mickgotwings/listenbrainz-playlist-downloader:master
+    image: ghcr.io/mickgotwings/listenbrainz-playlist-downloader:latest
 ```
 
 ## Manual
