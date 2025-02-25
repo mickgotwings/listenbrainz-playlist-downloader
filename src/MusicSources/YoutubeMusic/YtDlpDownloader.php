@@ -53,9 +53,10 @@ class YtDlpDownloader
             Options::create()
                 ->downloadPath($this->downloadPath)
                 ->extractAudio(true)
-                ->audioFormat('mp3')
+                ->audioFormat(Options::AUDIO_FORMAT_MP3)
                 ->audioQuality('0') // best
                 ->output('%(artist)s - %(track)s.%(ext)s')
+                ->cookies('/opt/lbdl/cookies')
                 ->url(YoutubeUrlBuilder::fromSearchResult($searchResult))
         );
 
