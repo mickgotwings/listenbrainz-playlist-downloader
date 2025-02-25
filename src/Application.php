@@ -178,6 +178,10 @@ class Application
             FilenameSanitizer::sanitize($playlist->title),
         );
 
+        if (!file_exists($destinationDir)) {
+            mkdir($destinationDir);
+        }
+
         $this->logger->debug("moving playlist to $destinationDir");
 
         foreach ($playlist->items as $item) {
